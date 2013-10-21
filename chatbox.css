@@ -1,0 +1,17 @@
+.loud {
+    font-weight: bold;
+}
+
+.sysmsg {
+    color: gray;
+    font-style: italic;
+    font-weight: bold;
+}
+
+.chat-input {
+    /*width: 100%;*/
+}
+
+.slashme {
+    font-style: italic;
+}

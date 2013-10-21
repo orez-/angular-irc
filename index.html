@@ -1,19 +1,20 @@
 <!doctype html>
-<html ng-app="irc" lang="en" ng-controller="TitleCtrl">
+<html ng-app="irc" lang="en" ng-controller="IrcCtrl">
   <head>
-    <title>{{channel}}</title>
+    <title>IRC</title>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
     <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css">
     <link href="http://netdna.bootstrapcdn.com/font-awesome/3.2.1/css/font-awesome.css" rel="stylesheet">
     <script src="http://documentcloud.github.io/underscore/underscore-min.js"></script>
     <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>
     <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.0.8/angular.min.js"></script>
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/angular-ui-bootstrap/0.6.0/ui-bootstrap-tpls.min.js"></script>
     <script src="jquery.injectCSS.js"></script>
     <script type="text/javascript" src="chatbox.js"></script>
     <link rel="stylesheet" href="chatbox.css">
   </head>
   <body>
-    <div ng-controller="IrcCtrl">
+    <div ng-controller="ChannelCtrl">
       <section class="container">
         <div class="row">
           <div class="col col-sm-8" data-original-title title>
@@ -46,7 +47,6 @@
         <div class="row">
           <div class="col col-sm-12" data-original-title title>
             <form class="form-horizontal">
-              <!-- ui-keypress="{tab: 'tabComplete($event)'}" -->
               <input class="chat-input" type="text" ng-model="messageInput" ng-keydown="tabComplete"></input>
               <button class="btn" ng-click="sendMessage()"><i class="icon-ok-sign"></i></button>
               <button class="btn" ng-click="toggleTimestamp()"><i class="icon-time"></i></button>

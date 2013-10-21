@@ -41,13 +41,7 @@ function binaryIndexOf(searchElement) {
     return ~maxIndex;
 };
 
-function tabComplete(e) {
-    e.stopPropagation();
-    console.log("Tab!");
-}
-
-// angular.module('irc', ['ui.keypress']);
-var mod = angular.module('irc', []);
+var mod = angular.module('irc', ["ui.bootstrap"]);
 mod.directive('ngKeydown', function() {
     return {
         restrict: 'A',
@@ -58,7 +52,7 @@ mod.directive('ngKeydown', function() {
     };
 });
 
-function TitleCtrl($scope) {
+function IrcCtrl($scope) {
     $scope.channel = "#channel";
     $scope.socket = new WebSocket("ws://localhost:8080", ["binary"]);
     $scope.socket.binaryType = "arraybuffer";
@@ -95,7 +89,7 @@ function TitleCtrl($scope) {
     };
 }
 
-function IrcCtrl($scope) {
+function ChannelCtrl($scope) {
     $scope.msgs = [];
     $scope.channelgoers = [[], [], []];
     $scope.showTimestamp = true;
@@ -240,7 +234,6 @@ function IrcCtrl($scope) {
         for(var i = 0; i < $scope.channelgoers.length; i++) {
             curList = $scope.channelgoers[i];
             lIndex = binaryIndexOf.call(curList, prefix);  // get the start of these guys
-            // console.log("Looking for lIndex);
             if(lIndex < 0) lIndex = ~lIndex + 1;
             for(; lIndex < curList.length && curList[lIndex].nick.toLowerCase().lastIndexOf(prefix, 0) === 0; lIndex++)
                 matches.push(curList[lIndex].nick);
@@ -250,6 +243,7 @@ function IrcCtrl($scope) {
         var common = matches[0];
         var max;
         for(var i = 1; i < matches.length; i++) {
+            extra = "";
             max = Math.max(matches[i].length, common.length);
             for(var j = 0; j < max; j++) {
                 if(matches[i].charAt(j).toLowerCase() != common.charAt(j).toLowerCase()) {

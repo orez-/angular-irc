@@ -15,3 +15,7 @@
 .slashme {
     font-style: italic;
 }
+
+.ng-scope {
+    cursor: default;
+}

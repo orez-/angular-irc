@@ -14,46 +14,52 @@
     <link rel="stylesheet" href="chatbox.css">
   </head>
   <body>
-    <div ng-controller="ChannelCtrl">
-      <section class="container">
-        <div class="row">
-          <div class="col col-sm-8" data-original-title title>
-            <div ng-repeat="message in msgs">
-              <span ng-show="showTimestamp && message.showTimestamp">[{{message.timestamp.toLocaleTimeString()}}] </span>
-              <span ng-show="!message.sysmsg" class="loud btn nick user-{{message.sender}}">{{message.sender}}</span>
-              <span ng-class="{sysmsg: message.sysmsg, slashme: message.me}">{{message.msg}}</span>
+    <tabset>
+      <tab ng-repeat="channel in channels"
+           heading="{{channel.name}}"
+           active=channel.active>
+        <div ng-controller="ChannelCtrl" ng-init="init(channel)">
+          <section class="container">
+            <div class="row">
+              <div class="col col-sm-8" data-original-title title>
+                <div ng-repeat="message in msgs">
+                  <span ng-show="showTimestamp && message.showTimestamp">[{{message.timestamp.toLocaleTimeString()}}] </span>
+                  <span ng-hide="message.sysmsg" class="loud btn nick user-{{message.sender}}">{{message.sender}}</span>
+                  <span ng-class="{sysmsg: message.sysmsg, slashme: message.me}">{{message.msg}}</span>
+                </div>
+              </div>
+              <div class="col col-sm-4" data-original-title title>
+                <div ng-repeat="person in channelgoers[2]">
+                  <span class="loud btn nick user-{{person.nick}}">
+                    <i class="icon-certificate"></i>
+                    {{person.nick}}
+                  </span>
+                </div>
+                <div ng-repeat="person in channelgoers[1]">
+                  <span class="loud btn nick user-{{person.nick}}">
+                    <i class="icon-bullhorn"></i>
+                    {{person.nick}}
+                  </span>
+                </div>
+                <div ng-repeat="person in channelgoers[0]">
+                  <span class="loud btn nick user-{{person.nick}}">
+                    {{person.nick}}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="col col-sm-4" data-original-title title>
-            <div ng-repeat="person in channelgoers[2]">
-              <span class="loud btn nick user-{{person.nick}}">
-                <i class="icon-certificate"></i>
-                {{person.nick}}
-              </span>
+            <div class="row">
+              <div class="col col-sm-12" data-original-title title>
+                <form class="form-horizontal">
+                  <input class="chat-input" type="text" ng-model="messageInput" ng-keydown="tabComplete"></input>
+                  <button class="btn" ng-click="sendMessage()"><i class="icon-ok-sign"></i></button>
+                  <button class="btn" ng-click="toggleTimestamp()"><i class="icon-time"></i></button>
+                </form>
+              </div>
             </div>
-            <div ng-repeat="person in channelgoers[1]">
-              <span class="loud btn nick user-{{person.nick}}">
-                <i class="icon-bullhorn"></i>
-                {{person.nick}}
-              </span>
-            </div>
-            <div ng-repeat="person in channelgoers[0]">
-              <span class="loud btn nick user-{{person.nick}}">
-                {{person.nick}}
-              </span>
-            </div>
-          </div>
+          </section>
         </div>
-        <div class="row">
-          <div class="col col-sm-12" data-original-title title>
-            <form class="form-horizontal">
-              <input class="chat-input" type="text" ng-model="messageInput" ng-keydown="tabComplete"></input>
-              <button class="btn" ng-click="sendMessage()"><i class="icon-ok-sign"></i></button>
-              <button class="btn" ng-click="toggleTimestamp()"><i class="icon-time"></i></button>
-            </form>
-          </div>
-        </div>
-      </section>
-    </div>
+      </tab>
+    </tabset>
   </body>
 </html>

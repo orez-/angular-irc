@@ -53,9 +53,38 @@ mod.directive('ngKeydown', function() {
 });
 
 function IrcCtrl($scope) {
-    $scope.channel = "#channel";
+    $scope.channels = [];
     $scope.socket = new WebSocket("ws://localhost:8080", ["binary"]);
     $scope.socket.binaryType = "arraybuffer";
+    $scope.buffer = "";
+    $scope.nick = "Interloper";
+
+    var setAllInactive = function() {
+        angular.forEach($scope.channels, function(channel) {
+            channel.active = false;
+        });
+    };
+
+    var addNewChannel = function(channel) {
+        var id = $scope.channels.length + 1;
+        $scope.channels.push({
+            id: id,
+            name: channel,
+            active: true
+        });
+    };
+
+    var getChannelScope = function(channel) {
+        for(var i = 0; i < $scope.channels.length; i++)
+            if ($scope.channels[i].name == channel)
+                return $scope.channels[i].scope;
+        return false;
+    }
+
+    $scope.addChannel = function(channel) {
+        setAllInactive();
+        addNewChannel(channel);
+    };
 
     $scope.sendRaw = function(/* *arguments */) {
         var sep = " ";
@@ -69,7 +98,7 @@ function IrcCtrl($scope) {
 
     $scope.sendJoin = function(channel) {
         $scope.sendRaw("JOIN", channel);
-        $scope.channel = channel  // TODO: bad, but for testing.
+        $scope.addChannel(channel);
     };
 
     $scope.sendNick = function(nick) {
@@ -87,25 +116,17 @@ function IrcCtrl($scope) {
     $scope.sendPart = function(channel, reason) {
         $scope.sendRaw("PART", channel, ":" + reason);
     };
-}
 
-function ChannelCtrl($scope) {
-    $scope.msgs = [];
-    $scope.channelgoers = [[], [], []];
-    $scope.showTimestamp = true;
-    $scope.nick = "Interloper";
-    $scope.buffer = "";
-
-    $scope.$parent.socket.onopen = function() {
+    $scope.socket.onopen = function() {
         var realname = "Major Look";
         console.log("Socket opened");
-        $scope.$parent.sendNick($scope.nick);
-        $scope.$parent.sendRaw("USER", $scope.nick, "0 * :" + realname);
-        $scope.$parent.sendJoin("#orez-angular");
+        $scope.sendNick($scope.nick);
+        $scope.sendRaw("USER", $scope.nick, "0 * :" + realname);
+        $scope.sendJoin("#orez-angular");
         $scope.$apply();
     };
 
-    $scope.$parent.socket.onmessage = function(msg) {
+    $scope.socket.onmessage = function(msg) {
         var decoded = "";
         var line;
         var nextEOL = 0;
@@ -124,71 +145,86 @@ function ChannelCtrl($scope) {
         $scope.$apply();
     };
 
-    $scope.$parent.socket.onclose = function() {
+    $scope.socket.onclose = function() {
         console.log("Socket closed");
         // $scope.$apply();
     };
 
     $scope.onprivmsg = function(words) {
         /* source, PRIVMSG, target, *message */
+        var target = getChannelScope(words[2]);
         var message = words.slice(3).join(" ").substring(1);
-        if(message.lastIndexOf("\x01ACTION", 0) === 0) { // /me
-            $scope.addMe(words[0].nick, message.slice(7, -1));
+        if(target) {
+            if(message.lastIndexOf("\x01ACTION", 0) === 0) { // /me
+                target.addMe(words[0].nick, message.slice(7, -1));
+            }
+            else
+                target.addMessage(words[0].nick, message);
         }
-        else
-            $scope.addMessage(words[0].nick, message);
     };
 
     $scope.onnick = function(words) {
         /* source, NICK, ':'new_nick */
-        // TODO: only do this if he's in your channel
         var new_nick = words[2].substring(1);
         var old_nick = words[0].nick;
-        var person = $scope.removePerson(old_nick);
-        $scope.addPerson(new_nick, person.hat);
         if(old_nick.toLowerCase() == $scope.nick.toLowerCase())
             $scope.nick = new_nick;
-        $scope.addSysmsg(old_nick + " is now known as " + new_nick);
+        angular.forEach($scope.channels, function (channel) {
+            var target = channel.scope;
+            var person = target.removePerson(old_nick);
+            if(person) {
+                target.addPerson(new_nick, person.hat);
+                target.addSysmsg(old_nick + " is now known as " + new_nick);
+            }
+        });
     };
 
     $scope.onquit = function(words) {
         /* source, QUIT, ':'*reason */
         var message = words.slice(2).join(" ").substring(1);
-        $scope.removePerson(words[0].nick);
-        $scope.addSysmsg(words[0].nick + " has quit: \"" + message + "\"");
+        angular.forEach($scope.channels, function (channel) {
+            var target = channel.scope;
+            if (target.removePerson(words[0].nick))
+                target.addSysmsg(words[0].nick + " has quit: \"" + message + "\"");
+        });
     };
 
     $scope.onpart = function(words) {
         /* source, PART, channel, ':'*reason */
-        if(words[2] == $scope.$parent.channel) {  // only note if it's THIS channel
-            var message = words.slice(3).join(" ").substring(1);
-            $scope.removePerson(words[0].nick);
-            $scope.addSysmsg(words[0].nick + " has left the channel: " + message);
+        var target = getChannelScope(words[2]);
+        var message = words.slice(3).join(" ").substring(1);
+        if(target) {
+            target.removePerson(words[0].nick);
+            target.addSysmsg(words[0].nick + " has left the channel: " + message);
         }
     };
 
     $scope.onjoin = function(words) {
         /* source, JOIN, channel */
-        if(words[2] == $scope.$parent.channel) {  // only note if it's THIS channel
-            $scope.addPerson(words[0].nick, 0);
-            $scope.addSysmsg(words[0].nick + " [" + words[0].full + "] entered the room.");
+        var target = getChannelScope(words[2]);
+        if (target) {
+            target.addPerson(words[0].nick, 0);
+            target.addSysmsg(words[0].nick + " [" + words[0].full + "] entered the room.");
         }
     };
 
     $scope.on353 = function(words) {
         /* source, 353, mynick, '@', channel, ':'*nicks */
         var nicks = words.slice(5);
-        nicks[0] = nicks[0].substring(1);  // cut the leading ':'
-        $scope.channelgoers = [[], [], []];  // clear the channel
-        var hat, hat_value;
-        for(var i = 0; i < nicks.length; i++) {
-            hat = nicks[i].charAt(0);
-            hat_value = 0;
-            if(hat == "@" || hat == "+") {
-                nicks[i] = nicks[i].slice(1);  // TODO: add more handling
-                hat_value = "+@".indexOf(hat) + 1;
+        var target = getChannelScope(words[4]);
+        if(target) {
+            nicks[0] = nicks[0].substring(1);  // cut the leading ':'
+            target.channelgoers = [[], [], []];  // clear the channel
+            var hat, hat_value;
+            for(var i = 0; i < nicks.length; i++) {
+                hat = nicks[i].charAt(0);
+                hat_value = 0;
+                if(hat == "@" || hat == "+") {
+                    nicks[i] = nicks[i].slice(1);
+                    hat_value = "+@".indexOf(hat) + 1;
+                }
+                target.addPerson(nicks[i], hat_value);
             }
-            $scope.addPerson(nicks[i], hat_value);
         }
     };
 
@@ -214,6 +250,17 @@ function ChannelCtrl($scope) {
                 console.log(message);
         }
     };
+}
+
+function ChannelCtrl($scope) {
+    $scope.msgs = [];
+    $scope.channelgoers = [[], [], []];
+    $scope.showTimestamp = true;
+
+    $scope.init = function(channel) {
+        channel.scope = $scope;
+        $scope.channel_name = channel.name;
+    }
 
     $scope.tabComplete = function(e) {
         if (e.which != 9) return;  // only capture tabs
@@ -285,7 +332,7 @@ function ChannelCtrl($scope) {
             index = binaryIndexOf.call($scope.channelgoers[i], nick.toLowerCase());
             if(index >= 0) { // found
                 var obj = $scope.channelgoers[i][index];
-                $scope.channelgoers.splice(index, 1);  // remove
+                $scope.channelgoers[i].splice(index, 1);  // remove
                 return obj;
             }
         }
@@ -298,7 +345,7 @@ function ChannelCtrl($scope) {
             sender: sender,
             timestamp: new Date(),
             showTimestamp: true
-        }
+        };
         $scope.msgs.push(message);
     };
 
@@ -309,7 +356,7 @@ function ChannelCtrl($scope) {
             timestamp: new Date(),
             me: true,
             showTimestamp: true
-        }
+        };
         $scope.msgs.push(message);
     };
 
@@ -341,12 +388,12 @@ function ChannelCtrl($scope) {
             $scope.$parent.sendPart(chan, msg);
         }
         else if(words[0] == "/cycle") {
-            var chan = $scope.$parent.channel;
+            var chan = $scope.channel_name;
             $scope.$parent.sendPart(chan, msg);
             $scope.$parent.sendJoin(chan);
         }
         else if(words[0] == "/me") {
-            $scope.$parent.sendMe($scope.$parent.channel, msg);
+            $scope.$parent.sendMe($scope.channel_name, msg);
             $scope.addMe($scope.nick, msg);
         }
         else if(words[0] == "/nick") {
@@ -367,7 +414,7 @@ function ChannelCtrl($scope) {
             $scope.handleCommand(message);
         else {
             $scope.addMessage($scope.nick, message);
-            $scope.$parent.sendPrivmsg($scope.$parent.channel, message);
+            $scope.$parent.sendPrivmsg($scope.channel_name, message);
         }
         $scope.messageInput = "";
         $('.btn.nick').popover({

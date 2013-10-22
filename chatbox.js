@@ -52,7 +52,56 @@ mod.directive('ngKeydown', function() {
     };
 });
 
+mod.directive('uiBlur', function() {
+    return function(scope, elem, attrs) {
+        elem.bind('blur', function() {
+            console.log("Blurring");
+            scope.$apply(attrs.uiBlur);
+        });
+    };
+});
+
+mod.directive('focusWhen', function($timeout) {
+    return function(scope, element, attrs) {
+        scope.$watch(attrs.focusWhen, function(value) {
+            if(value === true) {
+                $timeout(function() {
+                    element[0].focus();
+                });
+            }
+        });
+    };
+});
+
 function IrcCtrl($scope) {
+    // ================
+    // This stuff should be in its own Controller. It doesn't work when it is.
+    $scope.inputOpen = false;
+    $scope.channelName = "";
+
+    $scope.openInput = function($event) {
+        console.log("Opening input (on click)");
+        $event.stopPropagation();
+        if(!$scope.inputOpen) {
+            $scope.inputOpen = true;
+            $scope.channelName = "";
+        }
+    };
+
+    $scope.closeInput = function() {
+        $scope.inputOpen = false;
+    };
+
+    $scope.queryTarget = function(target) {
+        if(!target);
+        else if(target.charAt(0) == "#") {  // channel
+            $scope.sendJoin(target);
+        }
+        $scope.inputOpen = false;
+    };
+
+    // ==================
+
     $scope.channels = [];
     $scope.socket = new WebSocket("ws://localhost:8080", ["binary"]);
     $scope.socket.binaryType = "arraybuffer";
@@ -162,7 +211,6 @@ function IrcCtrl($scope) {
         console.log("Socket opened");
         $scope.sendNick($scope.nick);
         $scope.sendRaw("USER", $scope.nick, "0 * :" + realname);
-        // $scope.sendJoin("#orez-angular");
         $scope.$apply();
     };
 

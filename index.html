@@ -7,7 +7,7 @@
     <link href="http://netdna.bootstrapcdn.com/font-awesome/3.2.1/css/font-awesome.css" rel="stylesheet">
     <script src="http://documentcloud.github.io/underscore/underscore-min.js"></script>
     <script src="http://netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.0.8/angular.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.1.5/angular.min.js"></script>
     <script src="http://cdnjs.cloudflare.com/ajax/libs/angular-ui-bootstrap/0.6.0/ui-bootstrap-tpls.min.js"></script>
     <script src="jquery.injectCSS.js"></script>
     <script type="text/javascript" src="chatbox.js"></script>
@@ -15,7 +15,7 @@
   </head>
   <body>
     <tabset>
-      <tab ng-repeat="channel in channels" active=channel.active>
+      <tab ng-repeat="channel in channels" active="channel.active">
         <tab-heading ng-click="tabClick($event, channel)">{{channel.name}}</tab-heading>
         <div ng-controller="ChannelCtrl" ng-init="init(channel)">
           <section class="container">
@@ -50,7 +50,8 @@
             <div class="row">
               <div class="col col-sm-12" data-original-title title>
                 <form class="form-horizontal">
-                  <input class="chat-input" type="text" ng-model="messageInput" ng-keydown="tabComplete"></input>
+                  <input class="chat-input" type="text" ng-model="messageInput"
+                    ng-keydown="tabComplete" focus-when="channel.active"></input>
                   <button class="btn" ng-click="sendMessage()"><i class="icon-ok-sign"></i></button>
                   <button class="btn" ng-click="toggleTimestamp()"><i class="icon-time"></i></button>
                 </form>
@@ -58,6 +59,16 @@
             </div>
           </section>
         </div>
+      </tab>
+      <tab disabled="true">
+        <tab-heading ng-click="openInput($event)">
+          <i ng-hide="inputOpen" class="icon-plus-sign"></i>
+          <form ng-submit="queryTarget(channelName)" ng-show="inputOpen"
+            ng-click="$event.stopPropagation()">
+            <input id="queryInput" type="text", ng-model="channelName"
+              focus-when="inputOpen" ui-blur="closeInput()"></input>
+          </form>
+        </tab-heading>
       </tab>
     </tabset>
   </body>

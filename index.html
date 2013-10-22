@@ -17,7 +17,8 @@
     <tabset>
       <tab ng-repeat="channel in channels"
            heading="{{channel.name}}"
-           active=channel.active>
+           active=channel.active
+           ng-click="tabClick($event, channel)">
         <div ng-controller="ChannelCtrl" ng-init="init(channel)">
           <section class="container">
             <div class="row">

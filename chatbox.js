@@ -1,5 +1,5 @@
 function Source(str) {
-    this.nick = str.substring(1, str.indexOf("!"));
+    this.nick = str.substring(1, str.indexOf("!"));  // wrong for servers
     this.full = str.substring(1);
 }
 
@@ -59,6 +59,15 @@ function IrcCtrl($scope) {
     $scope.buffer = "";
     $scope.nick = "Interloper";
 
+    $scope.addStatusTab = function() {
+        $scope.channels.push({
+            name: "-- Status --",
+            active: true,
+            status: true
+        });
+    };
+    $scope.addStatusTab();
+
     var setAllInactive = function() {
         angular.forEach($scope.channels, function(channel) {
             channel.active = false;
@@ -66,11 +75,10 @@ function IrcCtrl($scope) {
     };
 
     var addNewChannel = function(channel) {
-        var id = $scope.channels.length + 1;
         $scope.channels.push({
-            id: id,
             name: channel,
-            active: true
+            active: true,
+            status: false
         });
     };
 
@@ -82,8 +90,38 @@ function IrcCtrl($scope) {
     }
 
     $scope.addChannel = function(channel) {
+        if($scope.channels[0].status) {
+            $scope.channels = [];
+        }
         setAllInactive();
         addNewChannel(channel);
+    };
+
+    $scope.removeChannel = function(channel) {
+        for(var i = 0; i < $scope.channels.length; i++) {
+            if($scope.channels[i].name == channel) {
+                if($scope.channels[i].status) return false;
+                var chan = $scope.channels[i];
+                $scope.channels.splice(i, 1);
+                setAllInactive();
+                if(i >= $scope.channels.length) i--;
+                if(i == -1) {
+                    $scope.addStatusTab();
+                    i = 0;
+                }
+                $scope.channels[i].active = true;
+                return chan;
+            }
+        }
+        return false;
+    };
+
+    $scope.tabClick = function($event, channel) {
+        if($event.which == 2) {  // middle click
+            $event.stopPropagation();
+            if (!channel.status)
+                $scope.sendPart(channel.name, "Tab closed");
+        }
     };
 
     $scope.sendRaw = function(/* *arguments */) {
@@ -114,7 +152,9 @@ function IrcCtrl($scope) {
     };
 
     $scope.sendPart = function(channel, reason) {
-        $scope.sendRaw("PART", channel, ":" + reason);
+        var target = $scope.removeChannel(channel);
+        if(target)
+            $scope.sendRaw("PART", channel, ":" + reason);
     };
 
     $scope.socket.onopen = function() {
@@ -122,7 +162,7 @@ function IrcCtrl($scope) {
         console.log("Socket opened");
         $scope.sendNick($scope.nick);
         $scope.sendRaw("USER", $scope.nick, "0 * :" + realname);
-        $scope.sendJoin("#orez-angular");
+        // $scope.sendJoin("#orez-angular");
         $scope.$apply();
     };
 
@@ -161,6 +201,14 @@ function IrcCtrl($scope) {
             else
                 target.addMessage(words[0].nick, message);
         }
+    };
+
+    $scope.onnotice = function(words) {
+        /* source, NOTICE, mynick, ':'Notice */
+        var notice = words.slice(3).join(" ").substring(1);
+        angular.forEach($scope.channels, function(channel) {
+            channel.scope.addNotice(words[0].nick, notice);
+        });
     };
 
     $scope.onnick = function(words) {
@@ -208,6 +256,24 @@ function IrcCtrl($scope) {
         }
     };
 
+    /* The topic of the channel given. */
+    $scope.on332 = function(words) {
+        /* source, 332, mynick, channel, ':'*topic */
+        words[5] = words[5].substring(1);  // cut leading ':'
+        var topic = words.slice(5).join(" ");
+        var target = getChannelScope(words[3]);
+        target.setTopic(topic);
+    };
+
+    /* The person who set the topic. */
+    $scope.on333 = function(words) {
+        /* source, 333, mynick, channel, setter_source */
+        var setter = new Source(words[4]);
+        var target = getChannelScope(words[3]);
+        target.topic.setter = setter;
+    };
+
+    /* The people in the channel given. */
     $scope.on353 = function(words) {
         /* source, 353, mynick, '@', channel, ':'*nicks */
         var nicks = words.slice(5);
@@ -228,13 +294,34 @@ function IrcCtrl($scope) {
         }
     };
 
+    /* No such channel */
+    $scope.on403 = function(words) {
+    }
+
+    /* Cannot send */
+    $scope.on404 = function(words) {
+        /* source 404 mynick channel ':Cannot send to channel' */
+        var target = getChannelScope(words[3]);
+        for(var i = target.msgs.length - 1; i >= 0; i--) {
+            if(target.msgs[i].nick == $scope.nick) {  // find the last message by you
+                target.msgs.splice(i, 1);  // remove that message
+                return true;
+            }
+        }
+        return false;
+    }
+
     $scope.incoming_commands = {
         PRIVMSG: $scope.onprivmsg,
+        NOTICE: $scope.onnotice,
         QUIT: $scope.onquit,
         PART: $scope.onpart,
         JOIN: $scope.onjoin,
         NICK: $scope.onnick,
-        "353": $scope.on353
+        "332": $scope.on332,
+        "333": $scope.on333,
+        "353": $scope.on353,
+        "404": $scope.on404
     };
 
     $scope.handleRecv = function(message) {
@@ -256,6 +343,7 @@ function ChannelCtrl($scope) {
     $scope.msgs = [];
     $scope.channelgoers = [[], [], []];
     $scope.showTimestamp = true;
+    $scope.topic = {topic: null, setter: null};
 
     $scope.init = function(channel) {
         channel.scope = $scope;
@@ -265,7 +353,6 @@ function ChannelCtrl($scope) {
     $scope.tabComplete = function(e) {
         if (e.which != 9) return;  // only capture tabs
         e.preventDefault();
-        console.log("Tab!");
         var index = $scope.messageInput.lastIndexOf(" ") + 1;
         var extra = " ";
         if(index == 0) {
@@ -314,6 +401,10 @@ function ChannelCtrl($scope) {
         jQuery.injectCSS(style);
     };
 
+    $scope.setTopic = function(topic) {
+        $scope.topic.topic = topic;
+    }
+
     $scope.addPerson = function(nick, hat) {
         $scope.injectPersonStyle(nick);
         var index = ~binaryIndexOf.call($scope.channelgoers[hat], nick.toLowerCase()) + 1;
@@ -360,6 +451,17 @@ function ChannelCtrl($scope) {
         $scope.msgs.push(message);
     };
 
+    $scope.addNotice = function(sender, msg) {
+        var message = {
+            msg: "NOTICE: " + msg,
+            sender: sender,
+            timestamp: new Date(),
+            showTimestamp: true
+            // TODO: distinguish notices better
+        };
+        $scope.msgs.push(message);
+    };
+
     $scope.addSysmsg = function(msg, suppressTimestamp) {
         var message = {
             msg: msg,
@@ -371,40 +473,30 @@ function ChannelCtrl($scope) {
         $scope.msgs.push(message);
     };
 
-    $scope.handleCommand = function(message) {
-        var words = message.split(/\s+/);
-        var msg = message.substring(message.indexOf(" ") + 1);
-        if(words[0] == "/join") {
-            $scope.$parent.sendJoin(words[1]);
-        }
-        else if(words[0] == "/raw") {
-            $scope.$parent.sendRaw(msg);
-        }
-        else if(words[0] == "/quit") {
-            $scope.$parent.sendQuit(msg);
-        }
-        else if(words[0] == "/part") {
-            var chan = $scope.$parent.channel;
-            $scope.$parent.sendPart(chan, msg);
-        }
-        else if(words[0] == "/cycle") {
+    $scope.outgoing_commands = {
+        "/join": function(words, msg) {$scope.$parent.sendJoin(words[1]);},
+        "/raw": function(words, msg) {$scope.$parent.sendRaw(msg);},
+        "/quit": function(words, msg) {$scope.$parent.sendQuit(msg);},
+        "/part": function(words, msg) {$scope.$parent.sendPart($scope.channel_name, msg);},
+        "/cycle": function(words, msg) {
             var chan = $scope.channel_name;
             $scope.$parent.sendPart(chan, msg);
             $scope.$parent.sendJoin(chan);
-        }
-        else if(words[0] == "/me") {
+        },
+        "/me": function(words, msg) {
             $scope.$parent.sendMe($scope.channel_name, msg);
             $scope.addMe($scope.nick, msg);
-        }
-        else if(words[0] == "/nick") {
-            $scope.$parent.sendNick(words[1]);
-        }
-        else if(words[0] == "/clear") {
-            $scope.msgs = [];
-        }
-        else {
-            $scope.addSysmsg("Unknown command " + words[0], true);
-        }
+        },
+        "/nick": function(words, msg) {$scope.$parent.sendNick(words[1]);},
+        "/clear": function(words, msg) {$scope.msgs = [];}
+    }
+
+    $scope.handleCommand = function(message) {
+        var words = message.split(/\s+/);
+        var msg = message.substring(message.indexOf(" ") + 1);
+        if(words[0] in $scope.outgoing_commands)
+            return $scope.outgoing_commands[words[0]](words, msg);
+        $scope.addSysmsg("Unknown command " + words[0], true);
     };
 
     $scope.sendMessage = function() {

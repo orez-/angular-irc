@@ -37,8 +37,7 @@ function binaryIndexOf(searchElement) {
             return currentIndex;
         }
     }
-
-    return ~maxIndex;
+    return ~(maxIndex + 1);
 };
 
 var mod = angular.module('irc', ["ui.bootstrap"]);
@@ -492,7 +491,7 @@ function ChannelCtrl($scope) {
         for(var i = 0; i < $scope.channelgoers.length; i++) {
             curList = $scope.channelgoers[i];
             lIndex = binaryIndexOf.call(curList, prefix);  // get the start of these guys
-            if(lIndex < 0) lIndex = ~lIndex + 1;
+            if(lIndex < 0) lIndex = ~lIndex;
             for(; lIndex < curList.length && curList[lIndex].nick.toLowerCase().lastIndexOf(prefix, 0) === 0; lIndex++)
                 matches.push(curList[lIndex].nick);
         }  // now we have all the users who match
@@ -531,7 +530,7 @@ function ChannelCtrl($scope) {
 
     $scope.addPerson = function(nick, hat) {
         $scope.injectPersonStyle(nick);
-        var index = ~binaryIndexOf.call($scope.channelgoers[hat], nick.toLowerCase()) + 1;
+        var index = ~binaryIndexOf.call($scope.channelgoers[hat], nick.toLowerCase());
         var person = {
             nick: nick,
             hat: hat,

@@ -601,7 +601,7 @@ function ChannelCtrl($scope) {
         "/raw": function(words, msg) {$scope.$parent.sendRaw(msg);},
         "/quit": function(words, msg) {$scope.$parent.sendQuit(msg);},
         "/part": function(words, msg) {
-            var channelName = $scope.channel_name;
+            var channelName = $scope.channel.name;
             msg = words.slice(2).join(" ");
             if(words[1]) {
                 channelName = words[1];
@@ -611,12 +611,12 @@ function ChannelCtrl($scope) {
             }
         },
         "/cycle": function(words, msg) {
-            var chan = $scope.channel_name;
+            var chan = $scope.channel.name;
             $scope.$parent.sendPart(chan, msg);
             $scope.$parent.sendJoin(chan);
         },
         "/me": function(words, msg) {
-            $scope.$parent.sendMe($scope.channel_name, msg);
+            $scope.$parent.sendMe($scope.channel.name, msg);
             $scope.addMe($scope.nick, msg);
         },
         "/nick": function(words, msg) {$scope.$parent.sendNick(words[1]);},
@@ -639,7 +639,7 @@ function ChannelCtrl($scope) {
             $scope.handleCommand(message);
         else {
             $scope.addMessage($scope.nick, message);
-            $scope.$parent.sendPrivmsg($scope.channel_name, message);
+            $scope.$parent.sendPrivmsg($scope.channel.name, message);
         }
         $scope.messageInput = "";
         $('.btn.nick').popover({

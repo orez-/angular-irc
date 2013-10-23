@@ -93,9 +93,20 @@ function IrcCtrl($scope) {
     };
 
     $scope.queryTarget = function(target) {
-        if(!target);
-        else if(target.charAt(0) == "#") {  // channel
-            $scope.sendJoin(target);
+        if(target) {  // input is not empty
+            var targetChan = getChannel(target);
+            if(targetChan) {  // already exists
+                setAllInactive();
+                targetChan.active = true;
+            }
+            else {
+                if(target.charAt(0) == "#") {  // channel
+                    $scope.sendJoin(target);
+                }
+                else {
+                    $scope.addPM(target);
+                }
+            }
         }
         $scope.inputOpen = false;
     };
@@ -111,6 +122,7 @@ function IrcCtrl($scope) {
     $scope.addStatusTab = function() {
         $scope.channels.push({
             name: "-- Status --",
+            channel: false,
             active: true,
             status: true
         });
@@ -126,16 +138,35 @@ function IrcCtrl($scope) {
     var addNewChannel = function(channel) {
         $scope.channels.push({
             name: channel,
+            channel: true,
             active: true,
             status: false
         });
     };
 
-    var getChannelScope = function(channel) {
+    var addNewPM = function(nick) {
+        $scope.channels.push({
+            name: nick,
+            channel: false,
+            active: true,  // TODO: maybe not
+            status: false
+        });
+    }
+
+    var getChannel = function(channel) {
+        lowerChannel = channel.toLowerCase();
         for(var i = 0; i < $scope.channels.length; i++)
-            if ($scope.channels[i].name == channel)
-                return $scope.channels[i].scope;
+            if ($scope.channels[i].name.toLowerCase() == lowerChannel) {
+                if ($scope.channels[i].name != channel)
+                    $scope.channels[i].name = channel;
+                return $scope.channels[i];
+            }
         return false;
+    }
+
+    var getChannelScope = function(channel) {
+        var toR = getChannel(channel);
+        return (toR && toR.scope);
     }
 
     $scope.addChannel = function(channel) {
@@ -145,6 +176,14 @@ function IrcCtrl($scope) {
         setAllInactive();
         addNewChannel(channel);
     };
+
+    $scope.addPM = function(nick) {
+        if($scope.channels[0].status) {
+            $scope.channels = [];
+        }
+        setAllInactive();
+        addNewPM(nick);
+    }
 
     $scope.removeChannel = function(channel) {
         for(var i = 0; i < $scope.channels.length; i++) {
@@ -168,8 +207,13 @@ function IrcCtrl($scope) {
     $scope.tabClick = function($event, channel) {
         if($event.which == 2) {  // middle click
             $event.stopPropagation();
-            if (!channel.status)
+            if (channel.status) return false; // can't close the status channel
+            if (channel.channel) {  // is a channel
                 $scope.sendPart(channel.name, "Tab closed");
+            }
+            else {  // is a PM
+                $scope.removeChannel(channel.name);
+            }
         }
     };
 
@@ -201,6 +245,9 @@ function IrcCtrl($scope) {
     };
 
     $scope.sendPart = function(channel, reason) {
+        if(channel.charAt(0) != "#") {  // make sure it's a channel
+            return false;
+        }
         var target = $scope.removeChannel(channel);
         if(target)
             $scope.sendRaw("PART", channel, ":" + reason);
@@ -240,15 +287,29 @@ function IrcCtrl($scope) {
 
     $scope.onprivmsg = function(words) {
         /* source, PRIVMSG, target, *message */
-        var target = getChannelScope(words[2]);
         var message = words.slice(3).join(" ").substring(1);
-        if(target) {
-            if(message.lastIndexOf("\x01ACTION", 0) === 0) { // /me
-                target.addMe(words[0].nick, message.slice(7, -1));
-            }
-            else
-                target.addMessage(words[0].nick, message);
+        var targetName;
+        var target;
+        var openFn;
+        if(words[2] == $scope.nick) {  // PM
+            targetName = words[0].nick;  // sender
+            openFn = $scope.addPM;
         }
+        else {  // channel
+            targetName = words[2];  // channel
+            openFn = $scope.addChannel;
+        }
+        target = getChannelScope(targetName);
+        if(!target) {  // window isn't open yet
+            openFn(targetName);
+            $scope.$apply();
+            target = $scope.channels[$scope.channels.length - 1].scope;
+        }
+        if(message.lastIndexOf("\x01ACTION", 0) === 0) { // /me
+            target.addMe(words[0].nick, message.slice(7, -1));
+        }
+        else
+            target.addMessage(words[0].nick, message);
     };
 
     $scope.onnotice = function(words) {
@@ -263,14 +324,24 @@ function IrcCtrl($scope) {
         /* source, NICK, ':'new_nick */
         var new_nick = words[2].substring(1);
         var old_nick = words[0].nick;
-        if(old_nick.toLowerCase() == $scope.nick.toLowerCase())
+        var lowerOldNick = old_nick.toLowerCase();
+        if(lowerOldNick == $scope.nick.toLowerCase())  // that's my nick
             $scope.nick = new_nick;
         angular.forEach($scope.channels, function (channel) {
-            var target = channel.scope;
-            var person = target.removePerson(old_nick);
-            if(person) {
-                target.addPerson(new_nick, person.hat);
-                target.addSysmsg(old_nick + " is now known as " + new_nick);
+            if(channel.channel) {
+                var target = channel.scope;
+                var person = target.removePerson(old_nick);
+                if(person) {
+                    target.addPerson(new_nick, person.hat);
+                    target.addSysmsg(old_nick + " is now known as " + new_nick);
+                }
+            }
+            else {
+                if(channel.name.toLowerCase() == lowerOldNick) {
+                    channel.name = new_nick;
+                    // TODO: merge if there's any more tabs named new_nick
+                    channel.scope.addSysmsg(old_nick + " is now known as " + new_nick);
+                }
             }
         });
     };
@@ -342,6 +413,11 @@ function IrcCtrl($scope) {
         }
     };
 
+    /* No such nick or channel */
+    $scope.on401 = function(words) {
+        /* source 401 mynick attempted_dest :No such nick/channel */
+    }
+
     /* No such channel */
     $scope.on403 = function(words) {
     }
@@ -395,7 +471,7 @@ function ChannelCtrl($scope) {
 
     $scope.init = function(channel) {
         channel.scope = $scope;
-        $scope.channel_name = channel.name;
+        $scope.channel = channel;
     }
 
     $scope.tabComplete = function(e) {
@@ -525,7 +601,16 @@ function ChannelCtrl($scope) {
         "/join": function(words, msg) {$scope.$parent.sendJoin(words[1]);},
         "/raw": function(words, msg) {$scope.$parent.sendRaw(msg);},
         "/quit": function(words, msg) {$scope.$parent.sendQuit(msg);},
-        "/part": function(words, msg) {$scope.$parent.sendPart($scope.channel_name, msg);},
+        "/part": function(words, msg) {
+            var channelName = $scope.channel_name;
+            msg = words.slice(2).join(" ");
+            if(words[1]) {
+                channelName = words[1];
+            }
+            if(!$scope.$parent.sendPart(channelName, msg)) { // failed
+                $scope.addSysmsg("No such channel: " + channelName, true);
+            }
+        },
         "/cycle": function(words, msg) {
             var chan = $scope.channel_name;
             $scope.$parent.sendPart(chan, msg);
@@ -536,7 +621,8 @@ function ChannelCtrl($scope) {
             $scope.addMe($scope.nick, msg);
         },
         "/nick": function(words, msg) {$scope.$parent.sendNick(words[1]);},
-        "/clear": function(words, msg) {$scope.msgs = [];}
+        "/clear": function(words, msg) {$scope.msgs = [];},
+        "/query": function(words, msg) {$scope.$parent.queryTarget(words[1]);}
     }
 
     $scope.handleCommand = function(message) {

@@ -238,7 +238,7 @@ function IrcCtrl($scope) {
     };
 
     $scope.sendMe = function(target, message) {
-        $scope.sendPrivmsg(target, "\x01ACTION" + message + "\x01");
+        $scope.sendPrivmsg(target, "\x01ACTION " + message + "\x01");
     };
 
     $scope.sendQuit = function(reason) {
@@ -565,7 +565,7 @@ function ChannelCtrl($scope) {
         if(words[0] != "")
             composedMsg.push({isLink: false, content: words[0]});
         for(var i = 1; i < words.length; i += 2) {
-            link = ((/https?:\/{1,3}/.test(words[i])) ? words[i] : "http://" + words[i]);
+            link = ((/^https?:\/{1,3}/.test(words[i])) ? words[i] : "http://" + words[i]);
             composedMsg.push({isLink: true, content: words[i], link: link});
             composedMsg.push({isLink: false, content: words[i + 1]});
         }

@@ -1,6 +1,7 @@
 <!doctype html>
 <html ng-app="irc" lang="en" ng-controller="IrcCtrl">
   <head>
+    <meta charset="UTF-8">
     <title>IRC</title>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
     <link rel="stylesheet" href="http://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css">
@@ -24,7 +25,12 @@
                 <div ng-repeat="message in msgs">
                   <span ng-show="showTimestamp && message.showTimestamp">[{{message.timestamp.toLocaleTimeString()}}] </span>
                   <span ng-hide="message.sysmsg" class="loud btn nick user-{{message.sender}}">{{message.sender}}</span>
-                  <span ng-class="{sysmsg: message.sysmsg, slashme: message.me}">{{message.msg}}</span>
+                  <span ng-class="{sysmsg: message.sysmsg, slashme: message.me}">
+                    <span ng-repeat="submessage in message.msg" data-ng-switch="submessage.isLink">
+                      <a data-ng-switch-when="true" target="_blank" href="{{submessage.link}}">{{submessage.content}}</a>
+                      <span data-ng-switch-when="false">{{submessage.content}}</span>
+                    </span>
+                  </span>
                 </div>
               </div>
               <div class="col col-sm-4" data-original-title title>

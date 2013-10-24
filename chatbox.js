@@ -14,6 +14,8 @@ String.prototype.hashCode = function(){
     return hash;
 };
 
+var re_url = /\b((?:https?:\/\/|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}\/)(?:[^\s()<>]+|\((?:[^\s()<>]+|(?:\([^\s()<>]+\)))*\))+(?:\((?:[^\s()<>]+|(?:\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/gi;
+
 function binaryIndexOf(searchElement) {
     'use strict';
 
@@ -448,7 +450,7 @@ function IrcCtrl($scope) {
     };
 
     $scope.handleRecv = function(message) {
-        words = message.replace(/[\r\n]$/g, "").split(" ");
+        var words = message.replace(/[\r\n]$/g, "").split(" ");
         if (words[0] == "PING")
             $scope.sendRaw("PONG", words[1]);
         else {
@@ -553,47 +555,48 @@ function ChannelCtrl($scope) {
         return false;
     };
 
+    $scope.addGenericMessage = function(msg, parseUrls, defaultMsg) {
+        var words = [msg];
+        if(parseUrls) {
+            words = msg.split(re_url);
+        }
+        var composedMsg = [];
+        var link;
+        if(words[0] != "")
+            composedMsg.push({isLink: false, content: words[0]});
+        for(var i = 1; i < words.length; i += 2) {
+            link = ((/https?:\/{1,3}/.test(words[i])) ? words[i] : "http://" + words[i]);
+            composedMsg.push({isLink: true, content: words[i], link: link});
+            composedMsg.push({isLink: false, content: words[i + 1]});
+        }
+        if(words[i - 1].content == "")
+            words.pop();
+        defaultMsg["msg"] = composedMsg;
+        defaultMsg["timestamp"] = new Date();
+        if(defaultMsg["showTimestamp"] === undefined)
+            defaultMsg["showTimestamp"] = true;
+        $scope.msgs.push(defaultMsg);
+    }
+
     $scope.addMessage = function(sender, msg) {
-        var message = {
-            msg: msg,
-            sender: sender,
-            timestamp: new Date(),
-            showTimestamp: true
-        };
-        $scope.msgs.push(message);
+        $scope.addGenericMessage(msg, true, {sender: sender});
     };
 
     $scope.addMe = function(sender, msg) {
-        var message = {
-            msg: msg,
-            sender: sender,
-            timestamp: new Date(),
-            me: true,
-            showTimestamp: true
-        };
-        $scope.msgs.push(message);
+        $scope.addGenericMessage(msg, true, {sender: sender, me: true});
     };
 
     $scope.addNotice = function(sender, msg) {
-        var message = {
-            msg: "NOTICE: " + msg,
-            sender: sender,
-            timestamp: new Date(),
-            showTimestamp: true
-            // TODO: distinguish notices better
-        };
-        $scope.msgs.push(message);
+        // TODO: distinguish notices better
+        $scope.addGenericMessage("NOTICE: " + msg, true, {sender: sender});
     };
 
     $scope.addSysmsg = function(msg, suppressTimestamp) {
-        var message = {
-            msg: msg,
-            sender: ":",
+        var defaultMsg = {
             sysmsg: true,
-            timestamp: new Date(),
             showTimestamp: !suppressTimestamp
         };
-        $scope.msgs.push(message);
+        $scope.addGenericMessage(msg, false, defaultMsg);
     };
 
     $scope.outgoing_commands = {
@@ -637,7 +640,7 @@ function ChannelCtrl($scope) {
         if(!message)  return;
         if(message.charAt(0) == "/")
             $scope.handleCommand(message);
-        else {
+        else if(!$scope.channel.status) {
             $scope.addMessage($scope.nick, message);
             $scope.$parent.sendPrivmsg($scope.channel.name, message);
         }

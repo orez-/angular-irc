@@ -414,6 +414,8 @@ function IrcCtrl($scope) {
         var target = getChannelScope(words[2]);
         var flags = words[3].split("");
         var remove = (flags.shift() === "-");
+        if(!target)
+            target = $scope.currentTabScope();
         target.addSysmsg("Mode " + words.slice(3).join(" ") + " set by " + words[0].nick);
         if(words[4]) {  // userflags
             var hat;

@@ -71,7 +71,7 @@
           <i ng-hide="inputOpen" class="icon-plus-sign"></i>
           <form ng-submit="queryTarget(channelName)" ng-show="inputOpen"
             ng-click="$event.stopPropagation()">
-            <input id="queryInput" type="text" ng-model="channelName"
+            <input placeholder="Channel or nick" id="queryInput" type="text" ng-model="channelName"
               focus-when="inputOpen" ui-blur="closeInput()"></input>
           </form>
         </tab-heading>

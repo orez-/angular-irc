@@ -74,6 +74,22 @@ mod.directive('focusWhen', function($timeout) {
     };
 });
 
+// mod.directive('ngSelectedText', function($parse) {
+//     return {
+//         restrict: 'A',
+//         link: function(scope, iElement, iAttrs, ctrl) {
+//             var model = $parse(iAttrs.ngSelectedText);
+//             var obj = {
+//                 start: iElement.selectionStart,
+//                 end: iElement.selectionEnd
+//             };
+//             console.log(obj);
+//             model.assign(scope, obj);
+//             scope.$apply();
+//         }
+//     };
+// });
+
 function IrcCtrl($scope) {
     // ================
     // This stuff should be in its own Controller. It doesn't work when it is.
@@ -118,7 +134,7 @@ function IrcCtrl($scope) {
     $scope.socket = new WebSocket("ws://localhost:8080", ["binary"]);
     $scope.socket.binaryType = "arraybuffer";
     $scope.buffer = "";
-    $scope.nick = "Interloper";
+    $scope.nick = "OrezAngular";
 
     $scope.addStatusTab = function() {
         $scope.channels.push({
@@ -306,8 +322,8 @@ function IrcCtrl($scope) {
             $scope.$apply();
             target = $scope.channels[$scope.channels.length - 1].scope;
         }
-        if(message.lastIndexOf("\x01ACTION", 0) === 0) { // /me
-            target.addMe(words[0].nick, message.slice(7, -1));
+        if(message.lastIndexOf("\x01ACTION ", 0) === 0) { // /me
+            target.addMe(words[0].nick, message.slice(8, -1));
         }
         else
             target.addMessage(words[0].nick, message);
@@ -376,6 +392,33 @@ function IrcCtrl($scope) {
         }
     };
 
+    $scope.onmode = function(words) {
+        /* source, MODE, channel, flags[, person] */
+        // :ChanServ!ChanServ@services. MODE #chan +o somenick
+        // source MODE #chan +m
+        console.log(words);
+        var target = getChannelScope(words[2]);
+        var flags = words[3].split("");
+        var remove = (flags.shift() === "-");
+        target.addSysmsg("Mode " + words.slice(3).join(" ") + " set by " + words[0].nick);
+        if(words[4]) {  // userflags
+            var hat;
+            for(var i = 0; i < flags.length; i++) {
+                if(flags[i] == "o")
+                    hat = 2;
+                else if(flags[i] == "v")
+                    hat = 1;
+                else continue;
+                if(remove)
+                    hat = ~hat;
+                target.hatPerson(words[4], hat);
+            }
+        }
+        else {  // channelflags
+            // ????
+        }
+    };
+
     /* The topic of the channel given. */
     $scope.on332 = function(words) {
         /* source, 332, mynick, channel, ':'*topic */
@@ -395,7 +438,9 @@ function IrcCtrl($scope) {
 
     /* The people in the channel given. */
     $scope.on353 = function(words) {
-        /* source, 353, mynick, '@', channel, ':'*nicks */
+        /* source, 353, mynick, /[@*=]/, channel, ':'*nicks */
+        /* "@" is used for secret channels, "*" for private
+           channels, and "=" for others (public channels). */
         var nicks = words.slice(5);
         var target = getChannelScope(words[4]);
         if(target) {
@@ -427,13 +472,8 @@ function IrcCtrl($scope) {
     $scope.on404 = function(words) {
         /* source 404 mynick channel ':Cannot send to channel' */
         var target = getChannelScope(words[3]);
-        for(var i = target.msgs.length - 1; i >= 0; i--) {
-            if(target.msgs[i].nick == $scope.nick) {  // find the last message by you
-                target.msgs.splice(i, 1);  // remove that message
-                return true;
-            }
-        }
-        return false;
+        words[4] = words[4].substring(1);
+        target.addSysmsg(words.slice(4).join(" "));
     }
 
     $scope.incoming_commands = {
@@ -443,6 +483,7 @@ function IrcCtrl($scope) {
         PART: $scope.onpart,
         JOIN: $scope.onjoin,
         NICK: $scope.onnick,
+        MODE: $scope.onmode,
         "332": $scope.on332,
         "333": $scope.on333,
         "353": $scope.on353,
@@ -483,7 +524,6 @@ function ChannelCtrl($scope) {
         if(index == 0) {
             if(!$scope.messageInput) return;
             extra = ", ";
-            index = 0;
         }
         var prefix = $scope.messageInput.substring(index).toLowerCase();  // last word
         var matches = [];
@@ -532,27 +572,58 @@ function ChannelCtrl($scope) {
 
     $scope.addPerson = function(nick, hat) {
         $scope.injectPersonStyle(nick);
-        var index = ~binaryIndexOf.call($scope.channelgoers[hat], nick.toLowerCase());
-        var person = {
+        $scope.addPersonObj({
             nick: nick,
             hat: hat,
-            op: function() {this.hat == 2},
-            voice: function() {this.hat == 1}
-        };
-        $scope.channelgoers[hat].splice(index, 0, person);  // insert
+            op: function() {!!(this.hat & 2)},
+            voice: function() {!!(this.hat & 1)}
+        });
     };
 
-    $scope.removePerson = function(nick) {
+    $scope.addPersonObj = function(obj) {
+        var loc = Math.min(obj.hat, 2);
+        var index = ~binaryIndexOf.call($scope.channelgoers[loc], obj.nick.toLowerCase());
+        $scope.channelgoers[loc].splice(index, 0, obj);  // insert
+    };
+
+    $scope.getPersonIndex = function(nick) {
         var index;
         for(var i = 0; i < $scope.channelgoers.length; i++) {
             index = binaryIndexOf.call($scope.channelgoers[i], nick.toLowerCase());
             if(index >= 0) { // found
-                var obj = $scope.channelgoers[i][index];
-                $scope.channelgoers[i].splice(index, 1);  // remove
-                return obj;
+                return [i, index];
             }
         }
         return false;
+    };
+
+    $scope.getPerson = function(nick) {
+        var indices = $scope.getPersonIndex(nick)
+        if(indices === false) return false;
+        return $scope.channelgoers[indices[0]][indices[1]];
+    };
+
+    $scope.removePerson = function(nick) {
+        var indices = $scope.getPersonIndex(nick)
+        if(indices === false) return false;
+        var i = indices[0];
+        var index = indices[1];
+        var obj = $scope.channelgoers[i][index];
+        $scope.channelgoers[i].splice(index, 1);  // remove
+        return obj;
+    };
+
+    /* If hat is positive, adds hat to list of hats
+       If hat is negative, removes ~hat from list of hats
+    */
+    $scope.hatPerson = function(nick, hat) {
+        var indices = $scope.getPersonIndex(nick);
+        if(indices === false) return false;
+        var user = $scope.channelgoers[indices[0]][indices[1]];
+        user.hat = ((hat >= 0) ? (user.hat | hat) : (user.hat & hat));
+        if(indices[0] === Math.min(user.hat, 2)) return;  // already in the right place
+        $scope.channelgoers[indices[0]].splice(indices[1], 1);  // remove
+        $scope.addPersonObj(user);
     };
 
     $scope.addGenericMessage = function(msg, parseUrls, defaultMsg) {
@@ -622,6 +693,7 @@ function ChannelCtrl($scope) {
             $scope.$parent.sendMe($scope.channel.name, msg);
             $scope.addMe($scope.nick, msg);
         },
+        "/whois": function(words, msg) {$scope.$parent.sendRaw(["WHOIS", words[1]]);},
         "/nick": function(words, msg) {$scope.$parent.sendNick(words[1]);},
         "/clear": function(words, msg) {$scope.msgs = [];},
         "/query": function(words, msg) {$scope.$parent.queryTarget(words[1]);}

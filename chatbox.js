@@ -1,5 +1,8 @@
 function Source(str) {
-    this.nick = str.substring(1, str.indexOf("!"));  // wrong for servers
+    var bangInd = str.indexOf("!");
+    if(bangInd === -1)
+        bangInd = str.length;
+    this.nick = str.substring(1, bangInd);
     this.full = str.substring(1);
 }
 
@@ -186,6 +189,13 @@ function IrcCtrl($scope) {
         return (toR && toR.scope);
     }
 
+    $scope.currentTabScope = function() {
+        for(var i = 0; i < $scope.channels.length; i++)
+            if($scope.channels[i].active)
+                return $scope.channels[i].scope;
+        return false;
+    }
+
     $scope.addChannel = function(channel) {
         if($scope.channels[0].status) {
             $scope.channels = [];
@@ -195,6 +205,10 @@ function IrcCtrl($scope) {
     };
 
     $scope.addPM = function(nick) {
+        if(nick.charAt(0) == "#") {  // TODO: generic nickcheck should go here
+            $scope.currentTabScope().addSysmsg("Nick contains invalid characters.", true);
+            return false;
+        }
         if($scope.channels[0].status) {
             $scope.channels = [];
         }
@@ -527,16 +541,27 @@ function ChannelCtrl($scope) {
         }
         var prefix = $scope.messageInput.substring(index).toLowerCase();  // last word
         var matches = [];
-        var curList;
-        var lIndex;
         if(prefix == "") return;
-        for(var i = 0; i < $scope.channelgoers.length; i++) {
-            curList = $scope.channelgoers[i];
-            lIndex = binaryIndexOf.call(curList, prefix);  // get the start of these guys
-            if(lIndex < 0) lIndex = ~lIndex;
-            for(; lIndex < curList.length && curList[lIndex].nick.toLowerCase().lastIndexOf(prefix, 0) === 0; lIndex++)
-                matches.push(curList[lIndex].nick);
-        }  // now we have all the users who match
+        if(prefix.charAt(0) == "#") {  // match channels
+            extra = " ";
+            var chan;
+            for(var i = 0; i < $scope.channels.length; i++) {
+                chan = $scope.channels[i].name;
+                if(chan.toLowerCase().lastIndexOf(prefix, 0) === 0)
+                    matches.push(chan);
+            }
+        }
+        else {  // match nicks in the current channel
+            var curList;
+            var lIndex;
+            for(var i = 0; i < $scope.channelgoers.length; i++) {
+                curList = $scope.channelgoers[i];
+                lIndex = binaryIndexOf.call(curList, prefix);  // get the start of these guys
+                if(lIndex < 0) lIndex = ~lIndex;
+                for(; lIndex < curList.length && curList[lIndex].nick.toLowerCase().lastIndexOf(prefix, 0) === 0; lIndex++)
+                    matches.push(curList[lIndex].nick);
+            }  // now we have all the users who match
+        }
         if(matches.length == 0) return;  // no matches
         // find the longest match common to all
         var common = matches[0];
@@ -693,10 +718,10 @@ function ChannelCtrl($scope) {
             $scope.$parent.sendMe($scope.channel.name, msg);
             $scope.addMe($scope.nick, msg);
         },
-        "/whois": function(words, msg) {$scope.$parent.sendRaw(["WHOIS", words[1]]);},
+        "/whois": function(words, msg) {$scope.$parent.sendRaw("WHOIS", words[1]);},
         "/nick": function(words, msg) {$scope.$parent.sendNick(words[1]);},
         "/clear": function(words, msg) {$scope.msgs = [];},
-        "/query": function(words, msg) {$scope.$parent.queryTarget(words[1]);}
+        "/query": function(words, msg) {$scope.$parent.addPM(words[1]);}
     }
 
     $scope.handleCommand = function(message) {
